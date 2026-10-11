@@ -9,6 +9,11 @@ import tensorflow as tf
 
 from flask import Flask, request, render_template_string
 from PIL import Image
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["TF_NUM_INTRAOP_THREADS"] = "2"
+os.environ["TF_NUM_INTEROP_THREADS"] = "2"
 from tensorflow.keras.applications.vgg16 import preprocess_input
 
 app = Flask(__name__)
