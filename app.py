@@ -1,29 +1,46 @@
+
 import os
+import io
+import base64
+
+import gdown
 import numpy as np
 import tensorflow as tf
 
 from flask import Flask, request, render_template_string
 from PIL import Image
-from werkzeug.utils import secure_filename
 from tensorflow.keras.applications.vgg16 import preprocess_input
 
 app = Flask(__name__)
 
-# Existing trained model
-MODEL_PATH = (
-    "/content/drive/MyDrive/Pneumonia_Project/"
-    "best_pneumonia_model.keras"
-)
+# Google Drive model configuration
+MODEL_PATH = "best_pneumonia_model.keras"
+FILE_ID = "1ClhVFJr3K6movHQ9ECD_YZP_8a2GxCxk"
 
-UPLOAD_FOLDER = "/content/pneumonia_uploads"
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
+# Prediction threshold (kept from your original model setup)
 THRESHOLD = 0.75
+
+# Upload configuration
+UPLOAD_FOLDER = "/tmp/pneumonia_uploads"
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
-# Load model once when the application starts
+# Download model if it is not already present
+if not os.path.exists(MODEL_PATH):
+    downloaded_file = gdown.download(
+        f"https://drive.google.com/uc?id={FILE_ID}",
+        MODEL_PATH,
+        quiet=False
+    )
+    if not downloaded_file or not os.path.exists(MODEL_PATH):
+        raise RuntimeError(
+            "Model download failed. Check the Google Drive sharing settings."
+        )
+
+# Load the trained model once at startup
 model = tf.keras.models.load_model(
     MODEL_PATH,
     custom_objects={"preprocess_input": preprocess_input},
@@ -40,6 +57,7 @@ HTML = """
     <title>Pneumonia Detection</title>
     <style>
         * { box-sizing: border-box; }
+
         body {
             margin: 0;
             font-family: Arial, sans-serif;
@@ -51,6 +69,7 @@ HTML = """
             align-items: center;
             padding: 24px;
         }
+
         .card {
             width: 100%;
             max-width: 560px;
@@ -59,8 +78,14 @@ HTML = """
             border-radius: 20px;
             box-shadow: 0 12px 40px rgba(15, 23, 42, .12);
         }
+
         h1 { margin-top: 0; text-align: center; }
-        .subtitle { text-align: center; color: #64748b; }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+        }
+
         input[type=file] {
             width: 100%;
             padding: 14px;
@@ -68,6 +93,7 @@ HTML = """
             border-radius: 10px;
             margin: 20px 0;
         }
+
         button {
             width: 100%;
             border: 0;
@@ -78,22 +104,28 @@ HTML = """
             font-size: 16px;
             cursor: pointer;
         }
+
         button:hover { background: #1d4ed8; }
+
         .result {
             margin-top: 24px;
             padding: 18px;
             border-radius: 12px;
             background: #f1f5f9;
             text-align: center;
+            overflow-wrap: anywhere;
         }
+
         .normal { color: #15803d; }
         .pneumonia { color: #b91c1c; }
+
         .warning {
             margin-top: 22px;
             font-size: 12px;
             line-height: 1.6;
             color: #64748b;
         }
+
         img {
             display: block;
             max-width: 100%;
@@ -106,7 +138,9 @@ HTML = """
 <body>
     <main class="card">
         <h1>🩻 Pneumonia Detection</h1>
-        <p class="subtitle">Chest X-ray classification using VGG16</p>
+        <p class="subtitle">
+            Chest X-ray classification using VGG16
+        </p>
 
         <form method="POST" enctype="multipart/form-data">
             <input type="file" name="xray"
@@ -139,11 +173,13 @@ HTML = """
 </html>
 """
 
+
 def allowed_file(filename):
     return (
         "." in filename
         and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
     )
+
 
 @app.route("/", methods=["GET", "POST"])
 def home():
@@ -163,12 +199,11 @@ def home():
 
         else:
             try:
-                # Decode and resize the uploaded image
+                # Read and resize the uploaded image
                 img = Image.open(file.stream).convert("RGB")
                 img = img.resize((224, 224))
 
-                # Match the model's expected input format.
-                # VGG16 preprocessing is already inside the model.
+                # VGG16 preprocessing is already included in the model
                 image = np.asarray(img, dtype=np.float32)
                 image = np.expand_dims(image, axis=0)
 
@@ -183,10 +218,7 @@ def home():
                 )
                 score = f"{probability * 100:.2f}"
 
-                # Display the uploaded image safely
-                import io
-                import base64
-
+                # Encode image for display on the results page
                 buffer = io.BytesIO()
                 img.save(buffer, format="JPEG")
                 image_data = base64.b64encode(
@@ -208,5 +240,7 @@ def home():
         image_data=image_data
     )
 
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
