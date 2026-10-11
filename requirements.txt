@@ -1,5 +1,7 @@
+
 flask
 tensorflow
 numpy
 Pillow
-pyngrok
+gdown
+gunicorn
